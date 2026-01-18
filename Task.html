@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+     
+    <link rel="icon" type="image/png" href="KeepOut/shiger.png">
+    <link rel="shortcut icon" type="image/png" href="KeepOut/shiger.png">
+    <link rel="apple-touch-icon" href="KeepOut/shiger.png">
+    <meta charset="utf-8" />
+     
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+      <title>ソート付きTODO</title>
+      <style>
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif;
+            margin: 24px;
+            background: #f7f8fb
+        }
+
+        .wrap {
+            max-width: 720px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(30, 30, 60, 0.06)
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: 20px
+        }
+
+        h2 {
+            margin: 24px 0 12px;
+            font-size: 18px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 4px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap
+        }
+
+        input[type=text],
+        input[type=datetime-local] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px
+        }
+
+        button {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 0;
+            background: #2563eb;
+            color: #fff;
+            cursor: pointer
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0
+        }
+
+        li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border-bottom: 1px solid #f0f2f6;
+            flex-wrap: wrap
+        }
+
+        li .txt {
+            flex: 1
+        }
+
+        .small {
+            font-size: 12px;
+            color: #666
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap
+        }
+
+        .muted {
+            background: #eee;
+            color: #333
+        }
+
+        .date-label {
+            font-size: 12px;
+            color: #888;
+            margin-left: 8px;
+        }
+
+        .guide {
+            background: #f0f4ff;
+            border-left: 4px solid #2563eb;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        #bulk-controls-main,
+        #bulk-controls-asap {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        /* ASAPゾーンのスタイルを強調 */
+        .asap-task {
+            background-color: #fff9e6;
+        }
+
+        .asap-input {
+            border-color: #ffc107;
+        }
+    </style>
+</head>
+
+<body>
+      <div class="wrap">
+            <h1>ソート付きTODO</h1>
+
+                <div class="guide">
+                  <strong>使い方：</strong>
+                  <ul style="margin:6px 0 0 16px;">
+                        <li><b>ASAPゾーン：</b> 最優先タスク。締切は設定できません。</li>
+                        <li><b>メインリスト：</b> 通常のタスク。締切日時を設定可能。</li>
+                        <li>タスクはブラウザに自動保存されます。</li>
+                      </ul>
+                </div>
+
+                <h2>🔥 ASAPゾーン</h2>
+                <div class="input-row">
+                  <input id="asap-input" type="text" placeholder="ASAPでやることを入力" class="asap-input" />
+                        <button id="add-asap-btn">追加</button>
+                </div>
+                <div id="bulk-controls-asap">
+                  <input type="checkbox" id="select-all-asap"> <label for="select-all-asap">全選択</label>
+                  <button id="delete-selected-asap" class="muted">✔ ASAPタスクを削除</button>
+                </div>
+                <ul id="list-asap"></ul>
+
+
+                <h2>✅ メインリスト</h2>
+                <div class="input-row">
+                  <input id="todo-input" type="text" placeholder="やることを入力" />
+                  <input id="todo-date" type="datetime-local" style="max-width:180px;" />
+                  <button id="add-btn">追加</button>
+                </div>
+                <div id="bulk-controls-main">
+                  <input type="checkbox" id="select-all-main"> <label for="select-all-main">全選択</label>
+                  <button id="delete-selected-main" class="muted">✔ メインタスクを削除</button>
+                </div>
+                <ul id="list-main"></ul>
+
+           
+        <hr>
+
+                <div class="controls">
+                  <button id="export-btn" class="muted">JSONでエクスポート</button>
+                  <button id="import-btn" class="muted">JSONをインポート</button>
+                  <button id="save-fsa" class="muted">直接ファイル保存（File System Access）</button>
+                  <input id="file-input" type="file" accept="application/json" style="display:none" />
+                </div>
+
+            <p class="small">
+                  自動バックアップ：ブラウザの <code>localStorage</code> に保存されます。
+                </p>
+         
+    </div>
+
+     
+    <script>
+        const STORAGE_KEY = 'local_todo_asap_v1';
+        let todos = [];
+        let asapTodos = [];
+
+        const input = document.getElementById('todo-input');
+        const dateInput = document.getElementById('todo-date');
+        const addBtn = document.getElementById('add-btn');
+        const listMainEl = document.getElementById('list-main');
+
+        const asapInput = document.getElementById('asap-input');
+        const addAsapBtn = document.getElementById('add-asap-btn');
+        const listAsapEl = document.getElementById('list-asap');
+
+        const selectAllMain = document.getElementById('select-all-main');
+        const deleteSelectedMain = document.getElementById('delete-selected-main');
+        const selectAllAsap = document.getElementById('select-all-asap');
+        const deleteSelectedAsap = document.getElementById('delete-selected-asap');
+
+        const exportBtn = document.getElementById('export-btn');
+        const importBtn = document.getElementById('import-btn');
+        const fileInput = document.getElementById('file-input');
+        const saveFsaBtn = document.getElementById('save-fsa');
+        let fileHandle = null;
+
+        function saveToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ todos, asapTodos }));
+        }
+
+        function loadFromLocalStorage() {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            try {
+                const data = JSON.parse(raw);
+                if (Array.isArray(data.todos)) todos = data.todos;
+                if (Array.isArray(data.asapTodos)) asapTodos = data.asapTodos;
+            } catch {
+                todos = []; asapTodos = [];
+            }
+        }
+
+        // タスク描画の共通関数
+        function createTaskElement(t, index, listType) {
+            const li = document.createElement('li');
+            if (listType === 'asap') li.classList.add('asap-task');
+
+            const chkMain = document.createElement('input');
+            chkMain.type = 'checkbox'; chkMain.className = `select-task-${listType}`; chkMain.dataset.index = index;
+
+            const done = document.createElement('input');
+            done.type = 'checkbox'; done.checked = !!t.done;
+            done.addEventListener('change', () => {
+                const list = listType === 'main' ? todos : asapTodos;
+                list[index].done = done.checked;
+                saveToLocalStorage();
+                render();
+            });
+
+            const span = document.createElement('span');
+            span.className = 'txt'; span.textContent = t.text;
+            if (t.done) span.style.textDecoration = 'line-through';
+
+            if (listType === 'main' && t.date) { // ASAPゾーンでは日付を表示しない
+                const dateLabel = document.createElement('span');
+                dateLabel.className = 'date-label';
+                // 📅 日付をローカル時間で表示＆曜日を追加
+                const d = new Date(t.date);
+                const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+                const wd = weekdays[d.getDay()];
+                const y = d.getFullYear();
+                const m = d.getMonth() + 1;
+                const day = d.getDate();
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                dateLabel.textContent = `期限:${y}/${m}/${day}(${wd}) ${hh}:${mm}`;
+                li.appendChild(dateLabel);
+            }
+
+            const edit = document.createElement('button');
+            edit.textContent = '編集'; edit.className = 'muted';
+            edit.addEventListener('click', () => {
+                const list = listType === 'main' ? todos : asapTodos;
+                const v = prompt('編集してください', t.text);
+                if (v !== null) { list[index].text = v.trim(); saveToLocalStorage(); render(); }
+            });
+
+            const del = document.createElement('button');
+            del.textContent = '削除'; del.className = 'muted';
+            del.addEventListener('click', () => {
+                if (confirm('削除しますか？')) {
+                    const list = listType === 'main' ? todos : asapTodos;
+                    list.splice(index, 1);
+                    saveToLocalStorage(); render();
+                }
+            });
+
+            li.prepend(chkMain, done, span);
+            li.append(edit, del);
+            return li;
+        }
+
+        function render() {
+            // メインリストの描画
+            listMainEl.innerHTML = '';
+            // 締切日でソート（メインリスト）
+            todos.sort((a, b) => {
+                // dateがないものは最後に
+                if (!a.date && !b.date) return (a.createdAt || '').localeCompare(b.createdAt || '');
+                if (!a.date) return 1;
+                if (!b.date) return -1;
+                return a.date.localeCompare(b.date);
+            });
+            todos.forEach((t, i) => {
+                listMainEl.appendChild(createTaskElement(t, i, 'main'));
+            });
+
+            // ASAPリストの描画
+            listAsapEl.innerHTML = '';
+            // 作成日でソート（ASAPリスト）
+            asapTodos.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+            asapTodos.forEach((t, i) => {
+                listAsapEl.appendChild(createTaskElement(t, i, 'asap'));
+            });
+        }
+
+        // date引数はメインリスト用。ASAPリストの場合はnullを渡す
+        function addTodo(text, date, listType) {
+            text = text.trim(); if (!text) return;
+            const newList = {
+                text, done: false, createdAt: new Date().toISOString(),
+                date: date || null
+            };
+
+            if (listType === 'main') {
+                todos.push(newList);
+            } else {
+                asapTodos.push(newList);
+            }
+
+            saveToLocalStorage();
+            render();
+        }
+
+        // メインリストの追加
+        addBtn.addEventListener('click', () => {
+            addTodo(input.value, dateInput.value, 'main');
+            input.value = ''; dateInput.value = '';
+        });
+
+        // ASAPリストの追加
+        addAsapBtn.addEventListener('click', () => {
+            addTodo(asapInput.value, null, 'asap'); // dateにはnullを渡す
+            asapInput.value = '';
+        });
+
+
+        // ✅ 一括削除機能 (メイン)
+        selectAllMain.addEventListener('change', () => {
+            const checks = [...document.querySelectorAll('.select-task-main')];
+            checks.forEach(c => c.checked = selectAllMain.checked);
+        });
+
+        deleteSelectedMain.addEventListener('click', () => {
+            const checks = [...document.querySelectorAll('.select-task-main:checked')];
+            if (checks.length === 0) return alert('削除するタスクを選んでください。');
+            if (!confirm(`${checks.length}件のメインタスクを削除しますか？`)) return;
+            const indices = checks.map(c => Number(c.dataset.index)).sort((a, b) => b - a);
+            indices.forEach(i => todos.splice(i, 1));
+            saveToLocalStorage(); render();
+        });
+
+        // ✅ 一括削除機能 (ASAP)
+        selectAllAsap.addEventListener('change', () => {
+            const checks = [...document.querySelectorAll('.select-task-asap')];
+            checks.forEach(c => c.checked = selectAllAsap.checked);
+        });
+
+        deleteSelectedAsap.addEventListener('click', () => {
+            const checks = [...document.querySelectorAll('.select-task-asap:checked')];
+            if (checks.length === 0) return alert('削除するASAPタスクを選んでください。');
+            if (!confirm(`${checks.length}件のASAPタスクを削除しますか？`)) return;
+            const indices = checks.map(c => Number(c.dataset.index)).sort((a, b) => b - a);
+            indices.forEach(i => asapTodos.splice(i, 1));
+            saveToLocalStorage(); render();
+        });
+
+        // ファイル操作 (エクスポート/インポート/FSA)
+        exportBtn.addEventListener('click', () => {
+            const allData = { todos, asapTodos };
+            if (allData.todos.length === 0 && allData.asapTodos.length === 0) return alert('データがありません');
+            const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'todos_asap.json'; a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        importBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', async ev => {
+            const f = ev.target.files[0]; if (!f) return;
+            try {
+                const txt = await f.text();
+                const parsed = JSON.parse(txt);
+                if (typeof parsed !== 'object' || parsed === null || (!Array.isArray(parsed.todos) && !Array.isArray(parsed.asapTodos))) throw new Error('データ形式が不正です');
+
+                if (confirm('追加しますか？キャンセルで上書きします。')) {
+                    if (Array.isArray(parsed.todos)) todos = todos.concat(parsed.todos);
+                    if (Array.isArray(parsed.asapTodos)) asapTodos = asapTodos.concat(parsed.asapTodos);
+                } else {
+                    if (Array.isArray(parsed.todos)) todos = parsed.todos;
+                    if (Array.isArray(parsed.asapTodos)) asapTodos = parsed.asapTodos;
+                    else { todos = []; asapTodos = []; }
+                }
+                saveToLocalStorage(); render();
+            } catch (err) { alert('読み込み失敗:' + err.message); }
+            fileInput.value = '';
+        });
+
+        saveFsaBtn.addEventListener('click', async () => {
+            if (!('showSaveFilePicker' in window)) { alert('このブラウザは非対応'); return; }
+            try {
+                if (!fileHandle) {
+                    fileHandle = await window.showSaveFilePicker({ suggestedName: 'todos_asap.json', types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }] });
+                }
+                const writable = await fileHandle.createWritable();
+                await writable.write(JSON.stringify({ todos, asapTodos }, null, 2));
+                await writable.close(); alert('保存しました');
+            } catch (e) { if (e.name !== 'AbortError') console.error(e); }
+        });
+
+        loadFromLocalStorage(); render();
+    </script>
+</body>
+<!--
+今後の追加要素
+-Enterで追加
+-期限切れのタスクを表示
+-デザイン変更
+-編集機能で日付も変更できるように
+-課題の詳細を書き込めるように
+-課題の進捗をバーで表示できるように
+-ASPSを自由に並べ替えられるように
+    -->
+
+</html>
